@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manajemen Keuangan</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="tag mono"><i></i>Financial Management System</div>
+      <h1>Manajemen Keuangan</h1>
+      <p class="subtitle">Catat dan kelola pemasukan serta pengeluaran Anda dengan presisi</p>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <div class="main-grid">
+      <!-- Left Column: Input & Filters & Table -->
+      <div class="left-col">
+        <!-- Quick Input Form -->
+        <div class="quick-input">
+          <div class="section-label mono">Input Transaksi</div>
+          <form id="quickForm" class="quick-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="quickType">Tipe *</label>
+                <select id="quickType" required>
+                  <option value="">Pilih</option>
+                  <option value="pemasukan">Pemasukan</option>
+                  <option value="pengeluaran">Pengeluaran</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label for="quickAmount">Jumlah *</label>
+                <input type="number" id="quickAmount" placeholder="0" required min="0" step="0.01">
+              </div>
+              
+              <div class="form-group">
+                <label for="quickCategory">Kategori *</label>
+                <input type="text" id="quickCategory" placeholder="Kategori" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="quickDate">Tanggal *</label>
+                <input type="date" id="quickDate" required>
+              </div>
+              
+              <div class="form-group form-group-wide">
+                <label for="quickDescription">Deskripsi</label>
+                <input type="text" id="quickDescription" placeholder="Opsional">
+              </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">
+              <span class="btn-icon">+</span> Simpan Transaksi
+            </button>
+          </form>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+          <div class="section-label mono">Filter</div>
+          <div class="filter-grid">
+            <div class="filter-group">
+              <label for="filterYear">Tahun</label>
+              <select id="filterYear">
+                <option value="">Semua</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filterMonth">Bulan</label>
+              <select id="filterMonth">
+                <option value="">Semua</option>
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filterType">Tipe</label>
+              <select id="filterType">
+                <option value="">Semua</option>
+                <option value="pemasukan">Pemasukan</option>
+                <option value="pengeluaran">Pengeluaran</option>
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="btn btn-secondary" onclick="resetFilters()">Reset Filter</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="table-section">
+          <div class="section-label mono">Riwayat Transaksi</div>
+          <div class="table-container">
+            <table id="transactionsTable">
+              <thead>
+                <tr>
+                  <th>Tanggal</th>
+                  <th>Tipe</th>
+                  <th>Kategori</th>
+                  <th>Deskripsi</th>
+                  <th>Jumlah</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsBody">
+                <tr>
+                  <td colspan="6" class="no-data">Memuat data...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Summary Cards -->
+      <div class="right-col">
+        <div class="summary-section">
+          <div class="section-label mono">Overview Keuangan</div>
+          <div class="summary-cards">
+            <div class="card card-balance">
+              <div class="card-content">
+                <h3>Saldo</h3>
+                <p class="amount" id="balance">Rp 0</p>
+                <small>Total saldo</small>
+              </div>
+            </div>
+            
+            <div class="card card-income">
+              <div class="card-content">
+                <h3>Pemasukan</h3>
+                <p class="amount" id="totalIncome">Rp 0</p>
+                <small id="incomeCount">0 transaksi</small>
+              </div>
+            </div>
+            
+            <div class="card card-expense">
+              <div class="card-content">
+                <h3>Pengeluaran</h3>
+                <p class="amount" id="totalExpense">Rp 0</p>
+                <small id="expenseCount">0 transaksi</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <h2 id="modalTitle">Edit Transaksi</h2>
+      <form id="transactionForm">
+        <input type="hidden" id="transactionId">
+        
+        <div class="form-group">
+          <label for="type">Tipe Transaksi *</label>
+          <select id="type" required>
+            <option value="">Pilih tipe</option>
+            <option value="pemasukan">Pemasukan</option>
+            <option value="pengeluaran">Pengeluaran</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="amount">Jumlah *</label>
+          <input type="number" id="amount" placeholder="Masukkan jumlah" required min="0" step="0.01">
+        </div>
+
+        <div class="form-group">
+          <label for="category">Kategori *</label>
+          <input type="text" id="category" placeholder="Contoh: Gaji, Makanan, Transport" required>
+        </div>
+
+        <div class="form-group">
+          <label for="description">Deskripsi</label>
+          <textarea id="description" rows="3" placeholder="Deskripsi transaksi (opsional)"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="transaction_date">Tanggal *</label>
+          <input type="date" id="transaction_date" required>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
+          <button type="submit" class="btn btn-primary">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
