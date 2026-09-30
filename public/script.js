@@ -49,7 +49,15 @@ async function loadTransactions() {
         if (month) url += `month=${month}&`;
         if (type) url += `type=${type}&`;
         
-        const response = await fetch(url);
+        // Add cache buster for Vercel
+        url += `_t=${Date.now()}`;
+        
+        const response = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
         if (!response.ok) throw new Error('Gagal memuat transaksi');
         
         const transactions = await response.json();
@@ -107,7 +115,15 @@ async function loadSummary() {
         if (year) url += `year=${year}&`;
         if (month) url += `month=${month}&`;
         
-        const response = await fetch(url);
+        // Add cache buster for Vercel
+        url += `_t=${Date.now()}`;
+        
+        const response = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
         if (!response.ok) throw new Error('Gagal memuat summary');
         
         const summary = await response.json();
@@ -154,10 +170,18 @@ async function handleSubmit(e) {
         
         if (!response.ok) throw new Error('Gagal menyimpan transaksi');
         
+        const result = await response.json();
+        
         showNotification(editingId ? 'Transaksi berhasil diupdate' : 'Transaksi berhasil ditambahkan', 'success');
         resetForm();
-        loadTransactions();
-        loadSummary();
+        
+        // Force reload dengan delay untuk Vercel revalidation
+        setTimeout(async () => {
+            await Promise.all([
+                loadTransactions(),
+                loadSummary()
+            ]);
+        }, 300);
     } catch (error) {
         console.error('Error:', error);
         showNotification('Gagal menyimpan transaksi', 'error');
@@ -241,7 +265,13 @@ function formatCurrency(amount) {
 
 // Format date
 function formatDate(dateString) {
-    const date = new Date(dateString);
+    if (!dateString) return '-';
+    
+    // Handle both SQLite format "YYYY-MM-DD" and ISO format
+    const date = new Date(dateString.replace(' ', 'T')); // Fix SQLite datetime format
+    
+    if (isNaN(date.getTime())) return dateString; // Return original if invalid
+    
     const options = { 
         weekday: 'long', 
         year: 'numeric', 
