@@ -10,7 +10,8 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static('public'));
+
+// DON'T serve static files here - will be handled by Vercel or at end
 
 // Cache untuk mempercepat response
 let dbInitialized = false;
@@ -284,9 +285,19 @@ app.get('/api/report/monthly', async (req, res) => {
   }
 });
 
-// Serve index.html
+// Static files - AFTER all API routes
+app.use(express.static('public'));
+
+// Serve index.html for root and any non-API routes
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Catch-all for SPA routing
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  }
 });
 
 // Initialize database before starting server
