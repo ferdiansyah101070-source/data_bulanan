@@ -2,150 +2,224 @@
 
 Aplikasi web untuk mengatur pemasukan dan pengeluaran bulanan dengan fitur lengkap.
 
+## Demo
+
+🚀 [Live Demo di Vercel](https://your-app.vercel.app)
+
 ## Fitur
 
-- ✅ Catat pemasukan dan pengeluaran
-- ✅ Input cepat tanpa modal
-- ✅ Filter berdasarkan hari, bulan, dan tahun
-- ✅ Dashboard dengan ringkasan keuangan
+- ✅ Input transaksi cepat
+- ✅ Dashboard summary (Saldo, Pemasukan, Pengeluaran)
+- ✅ Filter berdasarkan tahun, bulan, dan tipe
 - ✅ CRUD lengkap (Create, Read, Update, Delete)
-- ✅ Database SQLite (tidak perlu install MySQL)
-- ✅ Responsive design dengan dark theme
+- ✅ Database Postgres (Vercel Postgres / Neon)
+- ✅ Responsive dark theme design
 - ✅ Notifikasi real-time
 
 ## Teknologi
 
 - **Backend**: Node.js + Express
-- **Database**: SQLite (better-sqlite3)
+- **Database**: PostgreSQL (Vercel Postgres)
 - **Frontend**: HTML, CSS, JavaScript (Vanilla)
+- **Hosting**: Vercel (Serverless)
 - **Design**: Caustic-inspired dark theme
 
-## Cara Install
+## Quick Start (Local Development)
 
-### 1. Install Dependencies
+### 1. Clone & Install
 
 ```bash
+git clone https://github.com/username/finance-app.git
 cd finance-app
 npm install
 ```
 
-### 2. Jalankan Aplikasi
+### 2. Setup Database
+
+**Opsi A: Vercel Postgres (Recommended untuk production)**
+
+1. Buat database di [Vercel Dashboard](https://vercel.com)
+2. Copy environment variables ke `.env`
+3. Jalankan aplikasi
+
+**Opsi B: Local Postgres**
+
+```bash
+# Install PostgreSQL
+# Create database
+createdb finance_db
+
+# Update .env
+DATABASE_URL="postgresql://user:password@localhost:5432/finance_db"
+```
+
+### 3. Run
 
 ```bash
 npm start
 ```
 
-Atau untuk development dengan auto-reload:
+Buka: `http://localhost:3000`
+
+## Deploy ke Vercel
+
+### Method 1: Via GitHub (Recommended)
 
 ```bash
-npm run dev
+git init
+git add .
+git commit -m "Initial commit"
+git push origin main
 ```
 
-### 3. Buka Browser
+Kemudian:
+1. Login ke [Vercel](https://vercel.com)
+2. Klik **New Project**
+3. Import dari GitHub
+4. Vercel auto-detect settings
+5. **Setup Database**: Klik **Storage** > **Create** > **Postgres**
+6. **Deploy**
+
+### Method 2: Via Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login
+vercel
+```
+
+Ikuti prompts untuk setup database.
+
+## Environment Variables
+
+```bash
+# .env
+POSTGRES_URL="postgres://..."
+POSTGRES_PRISMA_URL="postgres://..."
+POSTGRES_URL_NON_POOLING="postgres://..."
+POSTGRES_USER="default"
+POSTGRES_HOST="xxx.postgres.vercel-storage.com"
+POSTGRES_PASSWORD="xxx"
+POSTGRES_DATABASE="verceldb"
+```
+
+## File Structure
 
 ```
-http://localhost:3000
+finance-app/
+├── public/              # Frontend
+│   ├── index.html      # Main page
+│   ├── style.css       # Styles
+│   └── script.js       # Logic
+├── server.js           # Express API
+├── vercel.json         # Vercel config
+├── package.json        # Dependencies
+├── DEPLOY.md           # Deploy guide
+└── README.md           # This file
 ```
-
-Database SQLite (`finance.db`) akan dibuat otomatis dengan data contoh.
 
 ## API Endpoints
 
 ### Transactions
-
-- `GET /api/transactions` - Get all transactions (dengan filter)
-  - Query params: `year`, `month`, `day`, `type`
-- `GET /api/transactions/:id` - Get transaction by ID
-- `POST /api/transactions` - Create new transaction
-- `PUT /api/transactions/:id` - Update transaction
-- `DELETE /api/transactions/:id` - Delete transaction
+- `GET /api/transactions` - Get all (filter: year, month, day, type)
+- `GET /api/transactions/:id` - Get by ID
+- `POST /api/transactions` - Create
+- `PUT /api/transactions/:id` - Update
+- `DELETE /api/transactions/:id` - Delete
 
 ### Summary
+- `GET /api/summary` - Statistics (filter: year, month)
+- `GET /api/report/monthly` - Monthly report (filter: year)
 
-- `GET /api/summary` - Get summary statistics
-  - Query params: `year`, `month`
+## Tech Stack Details
 
-### Reports
+### Frontend
+- Vanilla JavaScript (no framework)
+- CSS Grid & Flexbox
+- Fetch API
+- Dark theme with glassmorphism
 
-- `GET /api/report/monthly` - Get monthly report
-  - Query params: `year`
+### Backend
+- Express.js (serverless functions)
+- Vercel Postgres (@vercel/postgres)
+- CORS enabled
+- RESTful API
 
-## Struktur File
+### Database Schema
 
+```sql
+CREATE TABLE transactions (
+  id SERIAL PRIMARY KEY,
+  type VARCHAR(20) CHECK(type IN ('pemasukan', 'pengeluaran')),
+  amount DECIMAL(15, 2) NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  description TEXT,
+  transaction_date DATE NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
-finance-app/
-├── public/
-│   ├── index.html      # Frontend HTML
-│   ├── style.css       # Styling (Caustic theme)
-│   └── script.js       # JavaScript logic
-├── server.js           # Express server + SQLite
-├── finance.db          # SQLite database (auto-generated)
-├── package.json        # Dependencies
-└── README.md           # Documentation
-```
 
-## Fitur UI
+## Troubleshooting
 
-### Input Cepat
-Form input horizontal di atas tabel untuk entry cepat transaksi.
+### Error 500 di Vercel
+- Pastikan database sudah dibuat di Vercel Dashboard
+- Check environment variables sudah tersetting
+- Lihat logs di Vercel Dashboard > Deployments > Logs
 
-### Summary Cards
-- Card pemasukan (biru)
-- Card pengeluaran (amber)
-- Card saldo (putih)
+### Database connection error
+- Verify environment variables
+- Check database status di Vercel Storage tab
+- Restart deployment
 
-### Filter
-- Filter by tahun
-- Filter by bulan
-- Filter by tipe transaksi
+### UI tidak muncul
+- Hard refresh (Ctrl+F5)
+- Check browser console (F12)
+- Verify API endpoint di Network tab
 
-### Tabel Transaksi
-- Sortir otomatis by tanggal (terbaru)
-- Edit dan hapus per row
-- Badge warna untuk tipe
+## Development Tips
 
-## Hosting
+1. **Testing local**: Gunakan PostgreSQL local atau copy env vars dari Vercel
+2. **Debugging**: Check Vercel logs untuk server errors
+3. **Database**: Backup data sebelum migration
+4. **Performance**: Vercel auto-scales, no config needed
 
-### Hosting Gratis (Rekomendasi)
+## Free Tier Limits
 
-1. **Vercel/Netlify** - Frontend + Backend
-   - Deploy langsung dari GitHub
-   - SQLite database akan reset setiap deploy
-   - Untuk production, gunakan PostgreSQL/MongoDB
+Vercel Free:
+- ✅ Unlimited deployments
+- ✅ 100GB bandwidth/month
+- ✅ Serverless functions
+- ✅ SSL/HTTPS
 
-2. **Railway.app** - Full stack
-   - Support SQLite persistent
-   - Deploy dari GitHub
-   - Free tier tersedia
+Vercel Postgres Free:
+- ✅ 256 MB storage
+- ✅ 60 hours compute/month
+- ⚠️ Note: Vercel Postgres deprecated, migrate to Neon recommended
 
-### Hosting Berbayar
+## Migration ke Neon (Optional)
 
-1. **VPS**: DigitalOcean, Linode, AWS EC2
-2. **Cloud**: Google Cloud, Azure, Heroku
+Jika mau migrate dari Vercel Postgres ke Neon:
 
-## Tips Penggunaan
+1. Export data dari Vercel Postgres
+2. Buat database baru di [Neon](https://neon.tech)
+3. Update connection string di environment variables
+4. Import data ke Neon
+5. Redeploy
 
-1. **Backup Database**: Copy file `finance.db` secara berkala
-2. **Production**: Ganti SQLite dengan PostgreSQL/MySQL untuk production
-3. **HTTPS**: Gunakan SSL certificate untuk production
-4. **Monitoring**: Gunakan PM2 untuk production
-
-## Keuntungan SQLite
-
-- Tidak perlu install database server terpisah
-- Database dalam 1 file (`finance.db`)
-- Cukup untuk aplikasi personal/small team
-- Mudah backup (copy paste file)
-- Cepat untuk read operations
-
-## Upgrade ke MySQL
-
-Jika nanti mau upgrade ke MySQL:
-1. Install MySQL Server
-2. Ganti `better-sqlite3` dengan `mysql2` di package.json
-3. Ubah kode di `server.js` untuk koneksi MySQL
-4. Import `database.sql`
+Guide lengkap: [Neon Migration Guide](https://neon.com/docs/guides/vercel-postgres-transition-guide)
 
 ## License
 
 MIT
+
+## Support
+
+Jika ada pertanyaan atau issue:
+1. Check DEPLOY.md untuk panduan lengkap
+2. Buka issue di GitHub
+3. Check Vercel documentation
+
+---
+
+**Made with ❤️ using Vercel + PostgreSQL**

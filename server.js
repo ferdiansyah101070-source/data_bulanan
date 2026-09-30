@@ -1,6 +1,5 @@
 const express = require('express');
-const initSqlJs = require('sql.js');
-const fs = require('fs');
+const { sql } = require('@vercel/postgres');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -13,144 +12,112 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-let db;
-const DB_FILE = 'finance.db';
-
 // Initialize database
 async function initDatabase() {
-  const SQL = await initSqlJs();
-  
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const buffer = fs.readFileSync(DB_FILE);
-      db = new SQL.Database(buffer);
-      console.log('Database loaded from file');
-    } else {
-      db = new SQL.Database();
-      console.log('New database created');
+    await sql`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(20) NOT NULL CHECK(type IN ('pemasukan', 'pengeluaran')),
+        amount DECIMAL(15, 2) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        description TEXT,
+        transaction_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_transaction_date ON transactions(transaction_date);
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_type ON transactions(type);
+    `;
+
+    // Check if table is empty and insert sample data
+    const result = await sql`SELECT COUNT(*) as count FROM transactions`;
+    const count = parseInt(result.rows[0].count);
+    
+    if (count === 0) {
+      await sql`
+        INSERT INTO transactions (type, amount, category, description, transaction_date) 
+        VALUES 
+          ('pemasukan', 5000000, 'Gaji', 'Gaji bulanan', '2026-09-25'),
+          ('pengeluaran', 500000, 'Makanan', 'Belanja bulanan', '2026-09-26'),
+          ('pengeluaran', 200000, 'Transport', 'Bensin', '2026-09-27'),
+          ('pemasukan', 1000000, 'Bonus', 'Bonus proyek', '2026-09-28')
+      `;
+      console.log('Sample data inserted');
     }
+
+    console.log('Database initialized');
   } catch (err) {
-    db = new SQL.Database();
-    console.log('Created new database due to error:', err.message);
+    console.error('Database initialization error:', err);
   }
-
-  // Create table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL CHECK(type IN ('pemasukan', 'pengeluaran')),
-      amount REAL NOT NULL,
-      category TEXT NOT NULL,
-      description TEXT,
-      transaction_date TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  db.run(`CREATE INDEX IF NOT EXISTS idx_transaction_date ON transactions(transaction_date);`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_type ON transactions(type);`);
-
-  // Insert sample data if table is empty
-  const result = db.exec('SELECT COUNT(*) as count FROM transactions');
-  const count = result.length > 0 ? result[0].values[0][0] : 0;
-  
-  if (count === 0) {
-    db.run(`
-      INSERT INTO transactions (type, amount, category, description, transaction_date) 
-      VALUES 
-        ('pemasukan', 5000000, 'Gaji', 'Gaji bulanan', '2026-09-25'),
-        ('pengeluaran', 500000, 'Makanan', 'Belanja bulanan', '2026-09-26'),
-        ('pengeluaran', 200000, 'Transport', 'Bensin', '2026-09-27'),
-        ('pemasukan', 1000000, 'Bonus', 'Bonus proyek', '2026-09-28')
-    `);
-    saveDatabase();
-    console.log('Sample data inserted');
-  }
-
-  console.log('Database initialized');
-}
-
-// Save database to file
-function saveDatabase() {
-  try {
-    const data = db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_FILE, buffer);
-  } catch (err) {
-    console.error('Error saving database:', err);
-  }
-}
-
-// Helper to convert SQL.js result to objects
-function resultToObjects(result) {
-  if (!result || result.length === 0) return [];
-  const columns = result[0].columns;
-  const values = result[0].values;
-  return values.map(row => {
-    const obj = {};
-    columns.forEach((col, i) => {
-      obj[col] = row[i];
-    });
-    return obj;
-  });
 }
 
 // Routes
 
 // Get all transactions with filters
-app.get('/api/transactions', (req, res) => {
+app.get('/api/transactions', async (req, res) => {
   try {
     const { year, month, day, type } = req.query;
     
     let query = 'SELECT * FROM transactions WHERE 1=1';
-    const params = {};
+    const params = [];
+    let paramCount = 1;
 
     if (year) {
-      query += ` AND strftime('%Y', transaction_date) = $year`;
-      params.$year = year;
+      query += ` AND EXTRACT(YEAR FROM transaction_date) = $${paramCount}`;
+      params.push(year);
+      paramCount++;
     }
     if (month) {
-      query += ` AND strftime('%m', transaction_date) = $month`;
-      params.$month = month.padStart(2, '0');
+      query += ` AND EXTRACT(MONTH FROM transaction_date) = $${paramCount}`;
+      params.push(parseInt(month));
+      paramCount++;
     }
     if (day) {
-      query += ` AND strftime('%d', transaction_date) = $day`;
-      params.$day = day.padStart(2, '0');
+      query += ` AND EXTRACT(DAY FROM transaction_date) = $${paramCount}`;
+      params.push(parseInt(day));
+      paramCount++;
     }
     if (type) {
-      query += ' AND type = $type';
-      params.$type = type;
+      query += ` AND type = $${paramCount}`;
+      params.push(type);
+      paramCount++;
     }
 
     query += ' ORDER BY transaction_date DESC, created_at DESC';
 
-    const result = db.exec(query, params);
-    const transactions = resultToObjects(result);
-    res.json(transactions);
+    const result = await sql.query(query, params);
+    res.json(result.rows);
   } catch (err) {
+    console.error('Error fetching transactions:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get transaction by ID
-app.get('/api/transactions/:id', (req, res) => {
+app.get('/api/transactions/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = db.exec('SELECT * FROM transactions WHERE id = $id', { $id: id });
-    const transactions = resultToObjects(result);
+    const result = await sql`SELECT * FROM transactions WHERE id = ${id}`;
     
-    if (transactions.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    res.json(transactions[0]);
+    res.json(result.rows[0]);
   } catch (err) {
+    console.error('Error fetching transaction:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Create transaction
-app.post('/api/transactions', (req, res) => {
+app.post('/api/transactions', async (req, res) => {
   try {
     const { type, amount, category, description, transaction_date } = req.body;
 
@@ -158,73 +125,68 @@ app.post('/api/transactions', (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    db.run(`
+    const result = await sql`
       INSERT INTO transactions (type, amount, category, description, transaction_date) 
-      VALUES ($type, $amount, $category, $description, $date)
-    `, {
-      $type: type,
-      $amount: amount,
-      $category: category,
-      $description: description || null,
-      $date: transaction_date
-    });
-
-    const result = db.exec('SELECT last_insert_rowid() as id');
-    const id = result[0].values[0][0];
+      VALUES (${type}, ${amount}, ${category}, ${description || null}, ${transaction_date})
+      RETURNING id
+    `;
     
-    saveDatabase();
     res.status(201).json({ 
-      id: id, 
+      id: result.rows[0].id, 
       message: 'Transaction created successfully' 
     });
   } catch (err) {
+    console.error('Error creating transaction:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Update transaction
-app.put('/api/transactions/:id', (req, res) => {
+app.put('/api/transactions/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { type, amount, category, description, transaction_date } = req.body;
 
-    db.run(`
+    const result = await sql`
       UPDATE transactions 
-      SET type = $type, amount = $amount, category = $category, 
-          description = $description, transaction_date = $date, 
+      SET type = ${type}, 
+          amount = ${amount}, 
+          category = ${category}, 
+          description = ${description || null}, 
+          transaction_date = ${transaction_date}, 
           updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $id
-    `, {
-      $type: type,
-      $amount: amount,
-      $category: category,
-      $description: description || null,
-      $date: transaction_date,
-      $id: id
-    });
+      WHERE id = ${id}
+      RETURNING id
+    `;
     
-    saveDatabase();
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
     res.json({ message: 'Transaction updated successfully' });
   } catch (err) {
+    console.error('Error updating transaction:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Delete transaction
-app.delete('/api/transactions/:id', (req, res) => {
+app.delete('/api/transactions/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    db.run('DELETE FROM transactions WHERE id = $id', { $id: id });
+    const result = await sql`DELETE FROM transactions WHERE id = ${id} RETURNING id`;
     
-    saveDatabase();
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
     res.json({ message: 'Transaction deleted successfully' });
   } catch (err) {
+    console.error('Error deleting transaction:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get summary statistics
-app.get('/api/summary', (req, res) => {
+app.get('/api/summary', async (req, res) => {
   try {
     const { year, month } = req.query;
     
@@ -236,21 +198,23 @@ app.get('/api/summary', (req, res) => {
       FROM transactions
       WHERE 1=1
     `;
-    const params = {};
+    const params = [];
+    let paramCount = 1;
 
     if (year) {
-      query += ` AND strftime('%Y', transaction_date) = $year`;
-      params.$year = year;
+      query += ` AND EXTRACT(YEAR FROM transaction_date) = $${paramCount}`;
+      params.push(year);
+      paramCount++;
     }
     if (month) {
-      query += ` AND strftime('%m', transaction_date) = $month`;
-      params.$month = month.padStart(2, '0');
+      query += ` AND EXTRACT(MONTH FROM transaction_date) = $${paramCount}`;
+      params.push(parseInt(month));
+      paramCount++;
     }
 
     query += ' GROUP BY type';
 
-    const result = db.exec(query, params);
-    const rows = resultToObjects(result);
+    const result = await sql.query(query, params);
     
     const summary = {
       pemasukan: { total: 0, count: 0 },
@@ -258,49 +222,50 @@ app.get('/api/summary', (req, res) => {
       saldo: 0
     };
 
-    rows.forEach(row => {
+    result.rows.forEach(row => {
       if (row.type === 'pemasukan') {
         summary.pemasukan.total = parseFloat(row.total);
-        summary.pemasukan.count = row.count;
+        summary.pemasukan.count = parseInt(row.count);
         summary.saldo += parseFloat(row.total);
       } else if (row.type === 'pengeluaran') {
         summary.pengeluaran.total = parseFloat(row.total);
-        summary.pengeluaran.count = row.count;
+        summary.pengeluaran.count = parseInt(row.count);
         summary.saldo -= parseFloat(row.total);
       }
     });
 
     res.json(summary);
   } catch (err) {
+    console.error('Error fetching summary:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get monthly report
-app.get('/api/report/monthly', (req, res) => {
+app.get('/api/report/monthly', async (req, res) => {
   try {
     const { year } = req.query;
     
     let query = `
       SELECT 
-        strftime('%m', transaction_date) as month,
+        EXTRACT(MONTH FROM transaction_date) as month,
         type,
         SUM(amount) as total
       FROM transactions
     `;
-    const params = {};
+    const params = [];
 
     if (year) {
-      query += ` WHERE strftime('%Y', transaction_date) = $year`;
-      params.$year = year;
+      query += ` WHERE EXTRACT(YEAR FROM transaction_date) = $1`;
+      params.push(year);
     }
 
-    query += ` GROUP BY strftime('%m', transaction_date), type ORDER BY month`;
+    query += ` GROUP BY EXTRACT(MONTH FROM transaction_date), type ORDER BY month`;
 
-    const result = db.exec(query, params);
-    const rows = resultToObjects(result);
-    res.json(rows);
+    const result = await sql.query(query, params);
+    res.json(result.rows);
   } catch (err) {
+    console.error('Error fetching monthly report:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -310,16 +275,18 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
-initDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-});
+// Initialize database before starting server
+if (process.env.VERCEL) {
+  // On Vercel, init database on first request
+  initDatabase().catch(console.error);
+} else {
+  // Local development
+  initDatabase().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }).catch(console.error);
+}
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  saveDatabase();
-  console.log('\nDatabase saved. Shutting down...');
-  process.exit(0);
-});
+// Export for Vercel
+module.exports = app;

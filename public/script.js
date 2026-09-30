@@ -1,315 +1,255 @@
-const API_URL = 'http://localhost:3000/api';
+// API Base URL
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api' 
+    : '/api';
+
+let editingId = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-  loadYears();
-  loadTransactions();
-  loadSummary();
-  
-  // Set default date to today
-  document.getElementById('transaction_date').valueAsDate = new Date();
-  document.getElementById('quickDate').valueAsDate = new Date();
-  
-  // Filter listeners
-  document.getElementById('filterYear').addEventListener('change', handleFilterChange);
-  document.getElementById('filterMonth').addEventListener('change', handleFilterChange);
-  document.getElementById('filterType').addEventListener('change', handleFilterChange);
-  
-  // Form submit
-  document.getElementById('transactionForm').addEventListener('submit', handleSubmit);
-  document.getElementById('quickForm').addEventListener('submit', handleQuickSubmit);
+    initializeDateInput();
+    populateYearFilter();
+    loadTransactions();
+    loadSummary();
+    
+    document.getElementById('transactionForm').addEventListener('submit', handleSubmit);
+    document.getElementById('cancelBtn').addEventListener('click', cancelEdit);
 });
 
-// Load years for filter
-function loadYears() {
-  const currentYear = new Date().getFullYear();
-  const yearSelect = document.getElementById('filterYear');
-  
-  for (let year = currentYear; year >= currentYear - 5; year--) {
-    const option = document.createElement('option');
-    option.value = year;
-    option.textContent = year;
-    yearSelect.appendChild(option);
-  }
-  
-  yearSelect.value = currentYear;
+// Set today's date as default
+function initializeDateInput() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('transaction_date').value = today;
 }
 
-// Load transactions
+// Populate year filter with current and past years
+function populateYearFilter() {
+    const currentYear = new Date().getFullYear();
+    const yearSelect = document.getElementById('filterYear');
+    
+    for (let year = currentYear; year >= currentYear - 5; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    }
+    
+    yearSelect.value = currentYear;
+}
+
+// Load transactions with filters
 async function loadTransactions() {
-  try {
-    const year = document.getElementById('filterYear').value;
-    const month = document.getElementById('filterMonth').value;
-    const type = document.getElementById('filterType').value;
-    
-    let url = `${API_URL}/transactions?`;
-    if (year) url += `year=${year}&`;
-    if (month) url += `month=${month}&`;
-    if (type) url += `type=${type}&`;
-    
-    const response = await fetch(url);
-    const transactions = await response.json();
-    
-    renderTransactions(transactions);
-  } catch (error) {
-    console.error('Error loading transactions:', error);
-    document.getElementById('transactionsBody').innerHTML = 
-      '<tr><td colspan="6" class="no-data">Error loading data</td></tr>';
-  }
+    try {
+        const year = document.getElementById('filterYear').value;
+        const month = document.getElementById('filterMonth').value;
+        const type = document.getElementById('filterType').value;
+        
+        let url = `${API_URL}/transactions?`;
+        if (year) url += `year=${year}&`;
+        if (month) url += `month=${month}&`;
+        if (type) url += `type=${type}&`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Gagal memuat transaksi');
+        
+        const transactions = await response.json();
+        displayTransactions(transactions);
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Gagal memuat data transaksi', 'error');
+        document.getElementById('transactionsList').innerHTML = 
+            '<div class="empty-state">Gagal memuat data. Coba refresh halaman.</div>';
+    }
 }
 
-// Render transactions table
-function renderTransactions(transactions) {
-  const tbody = document.getElementById('transactionsBody');
-  
-  if (transactions.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="no-data">Tidak ada transaksi</td></tr>';
-    return;
-  }
-  
-  tbody.innerHTML = transactions.map(t => {
-    const date = new Date(t.transaction_date);
-    const formattedDate = date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric'
-    });
+// Display transactions
+function displayTransactions(transactions) {
+    const container = document.getElementById('transactionsList');
     
-    const amount = formatCurrency(t.amount);
-    const typeClass = t.type === 'pemasukan' ? 'type-pemasukan' : 'type-pengeluaran';
-    const amountClass = t.type === 'pemasukan' ? 'amount-positive' : 'amount-negative';
-    const amountPrefix = t.type === 'pemasukan' ? '+' : '-';
+    if (transactions.length === 0) {
+        container.innerHTML = '<div class="empty-state">Belum ada transaksi. Tambahkan transaksi pertama Anda!</div>';
+        return;
+    }
     
-    return `
-      <tr>
-        <td>${formattedDate}</td>
-        <td><span class="type-badge ${typeClass}">${capitalize(t.type)}</span></td>
-        <td>${t.category}</td>
-        <td>${t.description || '-'}</td>
-        <td class="${amountClass}">${amountPrefix} ${amount}</td>
-        <td>
-          <div class="action-buttons">
-            <button class="btn btn-edit" onclick="editTransaction(${t.id})">Edit</button>
-            <button class="btn btn-delete" onclick="deleteTransaction(${t.id})">Hapus</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
+    container.innerHTML = transactions.map(t => `
+        <div class="transaction-item">
+            <div class="transaction-info">
+                <div class="transaction-header">
+                    <span class="transaction-type ${t.type}">${t.type}</span>
+                    <span class="transaction-category">${t.category}</span>
+                </div>
+                ${t.description ? `<div class="transaction-description">${t.description}</div>` : ''}
+                <div class="transaction-date">${formatDate(t.transaction_date)}</div>
+            </div>
+            <div class="transaction-amount ${t.type}">
+                ${t.type === 'pemasukan' ? '+' : '-'} ${formatCurrency(t.amount)}
+            </div>
+            <div class="transaction-actions">
+                <button class="btn-edit" onclick="editTransaction(${t.id})">Edit</button>
+                <button class="btn-delete" onclick="deleteTransaction(${t.id})">Hapus</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 // Load summary
 async function loadSummary() {
-  try {
-    const year = document.getElementById('filterYear').value;
-    const month = document.getElementById('filterMonth').value;
-    
-    let url = `${API_URL}/summary?`;
-    if (year) url += `year=${year}&`;
-    if (month) url += `month=${month}&`;
-    
-    const response = await fetch(url);
-    const summary = await response.json();
-    
-    document.getElementById('totalIncome').textContent = formatCurrency(summary.pemasukan.total);
-    document.getElementById('incomeCount').textContent = `${summary.pemasukan.count} transaksi`;
-    
-    document.getElementById('totalExpense').textContent = formatCurrency(summary.pengeluaran.total);
-    document.getElementById('expenseCount').textContent = `${summary.pengeluaran.count} transaksi`;
-    
-    document.getElementById('balance').textContent = formatCurrency(summary.saldo);
-  } catch (error) {
-    console.error('Error loading summary:', error);
-  }
-}
-
-// Filter change handler
-function handleFilterChange() {
-  loadTransactions();
-  loadSummary();
-}
-
-// Reset filters
-function resetFilters() {
-  document.getElementById('filterYear').value = new Date().getFullYear();
-  document.getElementById('filterMonth').value = '';
-  document.getElementById('filterType').value = '';
-  loadTransactions();
-  loadSummary();
-}
-
-// Show add modal
-function showAddModal() {
-  document.getElementById('modalTitle').textContent = 'Tambah Transaksi';
-  document.getElementById('transactionForm').reset();
-  document.getElementById('transactionId').value = '';
-  document.getElementById('transaction_date').valueAsDate = new Date();
-  document.getElementById('modal').style.display = 'block';
-}
-
-// Edit transaction
-async function editTransaction(id) {
-  try {
-    const response = await fetch(`${API_URL}/transactions/${id}`);
-    const transaction = await response.json();
-    
-    document.getElementById('modalTitle').textContent = 'Edit Transaksi';
-    document.getElementById('transactionId').value = transaction.id;
-    document.getElementById('type').value = transaction.type;
-    document.getElementById('amount').value = transaction.amount;
-    document.getElementById('category').value = transaction.category;
-    document.getElementById('description').value = transaction.description || '';
-    document.getElementById('transaction_date').value = transaction.transaction_date.split('T')[0];
-    
-    document.getElementById('modal').style.display = 'block';
-  } catch (error) {
-    console.error('Error loading transaction:', error);
-    alert('Error loading transaction');
-  }
-}
-
-// Delete transaction
-async function deleteTransaction(id) {
-  if (!confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
-    return;
-  }
-  
-  try {
-    const response = await fetch(`${API_URL}/transactions/${id}`, {
-      method: 'DELETE'
-    });
-    
-    if (response.ok) {
-      loadTransactions();
-      loadSummary();
-    } else {
-      alert('Error deleting transaction');
+    try {
+        const year = document.getElementById('filterYear').value;
+        const month = document.getElementById('filterMonth').value;
+        
+        let url = `${API_URL}/summary?`;
+        if (year) url += `year=${year}&`;
+        if (month) url += `month=${month}&`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Gagal memuat summary');
+        
+        const summary = await response.json();
+        
+        document.getElementById('saldo').textContent = formatCurrency(summary.saldo);
+        document.getElementById('pemasukan').textContent = formatCurrency(summary.pemasukan.total);
+        document.getElementById('pengeluaran').textContent = formatCurrency(summary.pengeluaran.total);
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Gagal memuat summary', 'error');
     }
-  } catch (error) {
-    console.error('Error deleting transaction:', error);
-    alert('Error deleting transaction');
-  }
 }
 
 // Handle form submit
 async function handleSubmit(e) {
-  e.preventDefault();
-  
-  const id = document.getElementById('transactionId').value;
-  const data = {
-    type: document.getElementById('type').value,
-    amount: parseFloat(document.getElementById('amount').value),
-    category: document.getElementById('category').value,
-    description: document.getElementById('description').value,
-    transaction_date: document.getElementById('transaction_date').value
-  };
-  
-  try {
-    const url = id ? `${API_URL}/transactions/${id}` : `${API_URL}/transactions`;
-    const method = id ? 'PUT' : 'POST';
+    e.preventDefault();
     
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
+    const data = {
+        type: document.getElementById('type').value,
+        amount: parseFloat(document.getElementById('amount').value),
+        category: document.getElementById('category').value,
+        description: document.getElementById('description').value,
+        transaction_date: document.getElementById('transaction_date').value
+    };
     
-    if (response.ok) {
-      closeModal();
-      loadTransactions();
-      loadSummary();
-    } else {
-      alert('Error saving transaction');
+    try {
+        let response;
+        if (editingId) {
+            response = await fetch(`${API_URL}/transactions/${editingId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else {
+            response = await fetch(`${API_URL}/transactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        }
+        
+        if (!response.ok) throw new Error('Gagal menyimpan transaksi');
+        
+        showNotification(editingId ? 'Transaksi berhasil diupdate' : 'Transaksi berhasil ditambahkan', 'success');
+        resetForm();
+        loadTransactions();
+        loadSummary();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Gagal menyimpan transaksi', 'error');
     }
-  } catch (error) {
-    console.error('Error saving transaction:', error);
-    alert('Error saving transaction');
-  }
 }
 
-// Close modal
-function closeModal() {
-  document.getElementById('modal').style.display = 'none';
-}
-
-// Close modal when clicking outside
-window.onclick = function(event) {
-  const modal = document.getElementById('modal');
-  if (event.target === modal) {
-    closeModal();
-  }
-}
-
-// Handle quick form submit
-async function handleQuickSubmit(e) {
-  e.preventDefault();
-  
-  const data = {
-    type: document.getElementById('quickType').value,
-    amount: parseFloat(document.getElementById('quickAmount').value),
-    category: document.getElementById('quickCategory').value,
-    description: document.getElementById('quickDescription').value,
-    transaction_date: document.getElementById('quickDate').value
-  };
-  
-  try {
-    const response = await fetch(`${API_URL}/transactions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
-    
-    if (response.ok) {
-      // Reset form
-      document.getElementById('quickForm').reset();
-      document.getElementById('quickDate').valueAsDate = new Date();
-      
-      // Reload data
-      loadTransactions();
-      loadSummary();
-      
-      // Show success feedback
-      showNotification('Transaksi berhasil disimpan!', 'success');
-    } else {
-      showNotification('Error menyimpan transaksi', 'error');
+// Edit transaction
+async function editTransaction(id) {
+    try {
+        const response = await fetch(`${API_URL}/transactions/${id}`);
+        if (!response.ok) throw new Error('Gagal memuat transaksi');
+        
+        const transaction = await response.json();
+        
+        document.getElementById('type').value = transaction.type;
+        document.getElementById('amount').value = transaction.amount;
+        document.getElementById('category').value = transaction.category;
+        document.getElementById('description').value = transaction.description || '';
+        document.getElementById('transaction_date').value = transaction.transaction_date.split('T')[0];
+        
+        editingId = id;
+        document.getElementById('submitBtn').textContent = 'Update Transaksi';
+        document.getElementById('cancelBtn').style.display = 'inline-block';
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Gagal memuat transaksi untuk diedit', 'error');
     }
-  } catch (error) {
-    console.error('Error saving transaction:', error);
-    showNotification('Error menyimpan transaksi', 'error');
-  }
+}
+
+// Cancel edit
+function cancelEdit() {
+    resetForm();
+}
+
+// Delete transaction
+async function deleteTransaction(id) {
+    if (!confirm('Yakin ingin menghapus transaksi ini?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/transactions/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) throw new Error('Gagal menghapus transaksi');
+        
+        showNotification('Transaksi berhasil dihapus', 'success');
+        loadTransactions();
+        loadSummary();
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Gagal menghapus transaksi', 'error');
+    }
+}
+
+// Apply filters
+function applyFilters() {
+    loadTransactions();
+    loadSummary();
+}
+
+// Reset form
+function resetForm() {
+    document.getElementById('transactionForm').reset();
+    initializeDateInput();
+    editingId = null;
+    document.getElementById('submitBtn').textContent = 'Tambah Transaksi';
+    document.getElementById('cancelBtn').style.display = 'none';
+}
+
+// Format currency
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(amount);
+}
+
+// Format date
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    const options = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    return date.toLocaleDateString('id-ID', options);
 }
 
 // Show notification
-function showNotification(message, type) {
-  const notification = document.createElement('div');
-  notification.className = `notification notification-${type}`;
-  notification.textContent = message;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.classList.add('show');
-  }, 10);
-  
-  setTimeout(() => {
-    notification.classList.remove('show');
+function showNotification(message, type = 'info') {
+    const notification = document.getElementById('notification');
+    notification.textContent = message;
+    notification.className = `notification ${type} show`;
+    
     setTimeout(() => {
-      document.body.removeChild(notification);
-    }, 300);
-  }, 3000);
-}
-
-// Helper functions
-function formatCurrency(amount) {
-  return 'Rp ' + parseFloat(amount).toLocaleString('id-ID', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  });
-}
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+        notification.classList.remove('show');
+    }, 3000);
 }
