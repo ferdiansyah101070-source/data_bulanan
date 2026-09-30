@@ -98,6 +98,11 @@ async function loadSummary() {
         const year = document.getElementById('filterYear').value;
         const month = document.getElementById('filterMonth').value;
         
+        // Show loading state
+        document.getElementById('saldo').textContent = '...';
+        document.getElementById('pemasukan').textContent = '...';
+        document.getElementById('pengeluaran').textContent = '...';
+        
         let url = `${API_URL}/summary?`;
         if (year) url += `year=${year}&`;
         if (month) url += `month=${month}&`;
@@ -112,6 +117,9 @@ async function loadSummary() {
         document.getElementById('pengeluaran').textContent = formatCurrency(summary.pengeluaran.total);
     } catch (error) {
         console.error('Error:', error);
+        document.getElementById('saldo').textContent = 'Rp 0';
+        document.getElementById('pemasukan').textContent = 'Rp 0';
+        document.getElementById('pengeluaran').textContent = 'Rp 0';
         showNotification('Gagal memuat summary', 'error');
     }
 }

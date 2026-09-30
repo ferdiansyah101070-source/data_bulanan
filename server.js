@@ -12,8 +12,13 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// Initialize database
+// Cache untuk mempercepat response
+let dbInitialized = false;
+
+// Initialize database (lazy init)
 async function initDatabase() {
+  if (dbInitialized) return;
+  
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS transactions (
@@ -29,11 +34,15 @@ async function initDatabase() {
     `;
 
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_transaction_date ON transactions(transaction_date);
+      CREATE INDEX IF NOT EXISTS idx_transaction_date ON transactions(transaction_date DESC);
     `;
 
     await sql`
       CREATE INDEX IF NOT EXISTS idx_type ON transactions(type);
+    `;
+
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_date_type ON transactions(transaction_date DESC, type);
     `;
 
     // Check if table is empty and insert sample data
@@ -52,6 +61,7 @@ async function initDatabase() {
       console.log('Sample data inserted');
     }
 
+    dbInitialized = true;
     console.log('Database initialized');
   } catch (err) {
     console.error('Database initialization error:', err);
@@ -62,6 +72,8 @@ async function initDatabase() {
 
 // Get all transactions with filters
 app.get('/api/transactions', async (req, res) => {
+  await initDatabase();
+  
   try {
     const { year, month, day, type } = req.query;
     
@@ -90,7 +102,7 @@ app.get('/api/transactions', async (req, res) => {
       paramCount++;
     }
 
-    query += ' ORDER BY transaction_date DESC, created_at DESC';
+    query += ' ORDER BY transaction_date DESC, created_at DESC LIMIT 100';
 
     const result = await sql.query(query, params);
     res.json(result.rows);
@@ -187,6 +199,8 @@ app.delete('/api/transactions/:id', async (req, res) => {
 
 // Get summary statistics
 app.get('/api/summary', async (req, res) => {
+  await initDatabase();
+  
   try {
     const { year, month } = req.query;
     
